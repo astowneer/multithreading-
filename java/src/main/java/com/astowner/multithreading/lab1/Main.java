@@ -1,5 +1,7 @@
 package com.astowner.multithreading.lab1;
 
+import java.util.List;
+
 public class Main {
 
   private static void findSumNoThreads(int[] arr) {
@@ -38,13 +40,13 @@ public class Main {
     System.out.println("SUM multithreaded: " + sharedSum.getSum());
   }
 
-  private static void populateArr(int numberOfThreads, int chunkSize, int[] arr) {
+  private static void populateArr(int numberOfThreads, int[] arr) {
+    List<ChunkRange> ranges = ChunkRange.split(arr.length, numberOfThreads);
     FillThread[] fillThreads = new FillThread[numberOfThreads];
 
     for (int i = 0; i < numberOfThreads; i++) {
-      int startIndex = i * chunkSize;
-      int endIndex = (i == numberOfThreads - 1) ? arr.length : startIndex + chunkSize;
-      fillThreads[i] =new FillThread(startIndex, endIndex, arr);
+      ChunkRange range = ranges.get(i);
+      fillThreads[i] = new FillThread(range.start(), range.end(), arr);
     }
 
     for (FillThread t : fillThreads) {
@@ -60,14 +62,13 @@ public class Main {
     }
   }
 
-  private static SumThread[] createSumThreads(int numberOfThreads, int chunkSize, int dimension, int[] arr,
-      SharedSum sharedSum) {
+  private static SumThread[] createSumThreads(int numberOfThreads, int[] arr, SharedSum sharedSum) {
+    List<ChunkRange> ranges = ChunkRange.split(arr.length, numberOfThreads);
     SumThread[] threads = new SumThread[numberOfThreads];
 
     for (int i = 0; i < numberOfThreads; i++) {
-      int startIndex = i * chunkSize;
-      int endIndex = (i == numberOfThreads - 1) ? dimension : startIndex + chunkSize;
-      threads[i] = new SumThread(startIndex, endIndex, arr, sharedSum);
+      ChunkRange range = ranges.get(i);
+      threads[i] = new SumThread(range.start(), range.end(), arr, sharedSum);
     }
 
     return threads;
@@ -81,11 +82,9 @@ public class Main {
 
     SharedSum sharedSum = new SharedSum();
 
-    int chunkSize = dimension / numberOfThreads;
+    populateArr(numberOfThreads, arr);
 
-    populateArr(numberOfThreads, chunkSize, arr);
-
-    SumThread[] threads = createSumThreads(numberOfThreads, chunkSize, dimension, arr, sharedSum);
+    SumThread[] threads = createSumThreads(numberOfThreads, arr, sharedSum);
     findSumMultithreading(numberOfThreads, threads, sharedSum, arr);
 
     findSumNoThreads(arr);
