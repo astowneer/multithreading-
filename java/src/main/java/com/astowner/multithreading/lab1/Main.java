@@ -36,7 +36,14 @@ public final class Main {
       return EXIT_USAGE;
     }
 
-    int[] arr = new int[size];
+    int[] arr;
+    try {
+      arr = new int[size];
+    } catch (OutOfMemoryError e) {
+      System.err.println("Not enough heap for int[" + size + "] (~"
+          + (long) size * Integer.BYTES / (1024 * 1024) + " MB). Raise -Xmx or lower size.");
+      return EXIT_FAILURE;
+    }
     ArraySum.fillRandomParallel(arr, threads);
 
     long start = System.nanoTime();
