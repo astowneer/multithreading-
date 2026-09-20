@@ -9,17 +9,19 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/astowneer/multithreading-/lab1/go/mutex/internal/arraysum"
 )
 
 const (
 	defaultSize    = 1_000_000_000
-	defaultThreads = 4
+	defaultWorkers = 4
 
 	exitOK      = 0
 	exitFailure = 1
 	exitUsage   = 2
 
-	usage = "Usage: go run . [size] [threads]"
+	usage = "Usage: go run . [size] [workers]"
 )
 
 func main() {
@@ -27,7 +29,7 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	size, threads, err := parseArgs(args)
+	size, workers, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		fmt.Fprintln(stderr, usage)
@@ -35,13 +37,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	arr := make([]int32, size)
-	if err := fillRandomParallel(arr, threads); err != nil {
+	if err := arraysum.FillRandomParallel(arr, workers); err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitFailure
 	}
 
 	start := time.Now()
-	parallel, err := parallelSum(arr, threads)
+	parallel, err := arraysum.Parallel(arr, workers)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitFailure
@@ -51,7 +53,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "SUM multithreaded: %d\n", parallel)
 
 	start = time.Now()
-	sequential := sequentialSum(arr)
+	sequential := arraysum.Sequential(arr)
 	sequentialSeconds := time.Since(start).Seconds()
 	fmt.Fprintf(stdout, "No threads time (seconds): %.6f\n", sequentialSeconds)
 	fmt.Fprintf(stdout, "SUM no threads: %d\n", sequential)
@@ -66,23 +68,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-func parseArgs(args []string) (size, threads int, err error) {
+func parseArgs(args []string) (size, workers int, err error) {
 	if len(args) > 2 {
 		return 0, 0, errors.New("Too many arguments")
 	}
 
-	size, threads = defaultSize, defaultThreads
+	size, workers = defaultSize, defaultWorkers
 	if len(args) > 0 {
 		if size, err = parsePositive(args[0], "size"); err != nil {
 			return 0, 0, err
 		}
 	}
 	if len(args) > 1 {
-		if threads, err = parsePositive(args[1], "threads"); err != nil {
+		if workers, err = parsePositive(args[1], "workers"); err != nil {
 			return 0, 0, err
 		}
 	}
-	return size, threads, nil
+	return size, workers, nil
 }
 
 // parsePositive parses a positive 32-bit integer, the same range as a Java int.

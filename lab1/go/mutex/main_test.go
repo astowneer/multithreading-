@@ -58,19 +58,19 @@ func TestRunRejectsInvalidArguments(t *testing.T) {
 }
 
 func TestParseArgsUsesDefaults(t *testing.T) {
-	size, threads, err := parseArgs(nil)
+	size, workers, err := parseArgs(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if size != defaultSize || threads != defaultThreads {
-		t.Errorf("parseArgs(nil) = (%d, %d), want (%d, %d)", size, threads, defaultSize, defaultThreads)
+	if size != defaultSize || workers != defaultWorkers {
+		t.Errorf("parseArgs(nil) = (%d, %d), want (%d, %d)", size, workers, defaultSize, defaultWorkers)
 	}
 
-	size, threads, err = parseArgs([]string{"50"})
+	size, workers, err = parseArgs([]string{"50"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if size != 50 || threads != defaultThreads {
-		t.Errorf("parseArgs([50]) = (%d, %d), want (50, %d)", size, threads, defaultThreads)
+	if size != 50 || workers != defaultWorkers {
+		t.Errorf("parseArgs([50]) = (%d, %d), want (50, %d)", size, workers, defaultWorkers)
 	}
 }
