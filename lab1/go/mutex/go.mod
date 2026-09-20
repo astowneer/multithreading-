@@ -1,3 +1,3 @@
-module lab1-array-sum
+module github.com/astowneer/multithreading-/lab1/go/mutex
 
 go 1.22

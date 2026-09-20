@@ -1,5 +1,6 @@
 # Build output
 /lab1-array-sum
+/mutex
 /bin/
 
 # Test and profiling output
