@@ -35,6 +35,17 @@ For example, `lab1/java/manual-threads/` is Lab 1, in Java, using explicit threa
   `.gitignore` for build output. Nothing is shared between approaches, so each one builds on its own.
 - The root `.gitignore` only covers OS and IDE files that apply to every language.
 
+## CI
+
+GitHub Actions has one workflow per language in `.github/workflows/`. A workflow runs only when
+files of its language change.
+
+| Workflow | Runs on changes to | What it does |
+|----------|--------------------|--------------|
+| `java.yml` | `**/java/**` | Finds every folder containing a `pom.xml`, then builds and tests each one with `./mvnw verify` on JDK 21 and uploads the jar as a run artifact. |
+
+Projects are discovered automatically, so a new Java approach needs no workflow changes.
+
 ## Adding an implementation
 
 1. Create `<lab>/<language>/<approach>/` (and `<lab>/README.md` if the lab is new).
@@ -42,3 +53,4 @@ For example, `lab1/java/manual-threads/` is Lab 1, in Java, using explicit threa
    test and run it.
 3. Add a row to the implementations table in `<lab>/README.md`.
 4. For a new lab, add it to the table above.
+5. For a new language, add a workflow `.github/workflows/<language>.yml` and a row to the CI table.
