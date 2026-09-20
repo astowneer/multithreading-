@@ -1,90 +1,29 @@
 package com.astowner.multithreading.lab1;
 
-import java.util.List;
+/** Fills an array, sums it with threads and without, and prints how long each took. */
+public final class Main {
 
-public class Main {
-
-  private static void findSumNoThreads(int[] arr) {
-    long sum = 0;
-
-    long startTime = System.nanoTime();
-
-    for (int i = 0; i < arr.length; i++) {
-      sum += arr[i];
-    }
-
-    long endTime = System.nanoTime();
-
-    double elapsedSeconds = (endTime - startTime) / 1_000_000_000.0;
-    System.out.println("No threads time (seconds): " + elapsedSeconds);
-    System.out.println("SUM no threads: " + sum);
-  }
-
-  private static void findSumMultithreading(int numberOfThreads, Thread[] threads, SharedSum sharedSum, int[] arr) {
-    long startTime = System.nanoTime();
-    for (int i = 0; i < numberOfThreads; i++) {
-      threads[i].start();
-    }
-
-    for (int i = 0; i < numberOfThreads; i++) {
-      try {
-        threads[i].join();
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-    }
-
-    long endTime = System.nanoTime();
-    double elapsedSeconds = (endTime - startTime) / 1_000_000_000.0;
-    System.out.println("Multithreaded time (seconds): " + elapsedSeconds);
-    System.out.println("SUM multithreaded: " + sharedSum.getSum());
-  }
-
-  private static void populateArr(int numberOfThreads, int[] arr) {
-    List<ChunkRange> ranges = ChunkRange.split(arr.length, numberOfThreads);
-    Thread[] fillThreads = new Thread[numberOfThreads];
-
-    for (int i = 0; i < numberOfThreads; i++) {
-      fillThreads[i] = new Thread(new FillTask(arr, ranges.get(i)));
-    }
-
-    for (Thread t : fillThreads) {
-      t.start();
-    }
-
-    for (Thread t : fillThreads) {
-      try {
-        t.join();
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-    }
-  }
-
-  private static Thread[] createSumThreads(int numberOfThreads, int[] arr, SharedSum sharedSum) {
-    List<ChunkRange> ranges = ChunkRange.split(arr.length, numberOfThreads);
-    Thread[] threads = new Thread[numberOfThreads];
-
-    for (int i = 0; i < numberOfThreads; i++) {
-      threads[i] = new Thread(new SumTask(arr, ranges.get(i), sharedSum));
-    }
-
-    return threads;
-  }
+  private Main() {}
 
   public static void main(String[] args) {
-    int dimension = 1000000000;
+    int dimension = 1_000_000_000;
     int numberOfThreads = 4;
 
     int[] arr = new int[dimension];
+    ArraySum.fillRandomParallel(arr, numberOfThreads);
 
-    SharedSum sharedSum = new SharedSum();
+    long start = System.nanoTime();
+    long parallelSum = ArraySum.parallel(arr, numberOfThreads);
+    System.out.println("Multithreaded time (seconds): " + secondsSince(start));
+    System.out.println("SUM multithreaded: " + parallelSum);
 
-    populateArr(numberOfThreads, arr);
+    start = System.nanoTime();
+    long sequentialSum = ArraySum.sequential(arr);
+    System.out.println("No threads time (seconds): " + secondsSince(start));
+    System.out.println("SUM no threads: " + sequentialSum);
+  }
 
-    Thread[] threads = createSumThreads(numberOfThreads, arr, sharedSum);
-    findSumMultithreading(numberOfThreads, threads, sharedSum, arr);
-
-    findSumNoThreads(arr);
+  private static double secondsSince(long startNanos) {
+    return (System.nanoTime() - startNanos) / 1_000_000_000.0;
   }
 }
