@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -13,7 +14,7 @@ func runCapturing(args ...string) (code int, stdout, stderr string) {
 }
 
 func TestRunPrintsTimingsSumsAndSpeedup(t *testing.T) {
-	code, stdout, stderr := runCapturing("100003", "3")
+	code, stdout, stderr := runCapturing("-size", "100003", "-workers", "3")
 
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr: %q)", code, exitOK, stderr)
@@ -33,44 +34,71 @@ func TestRunPrintsTimingsSumsAndSpeedup(t *testing.T) {
 }
 
 func TestRunRejectsInvalidArguments(t *testing.T) {
-	cases := [][]string{
-		{"1", "2", "3"},
-		{"0"},
-		{"-5"},
-		{"abc"},
-		{"10", "0"},
-		{"10", "x"},
-		{"3000000000"},
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"unexpected positional argument", []string{"100"}},
+		{"unknown flag", []string{"-threads", "4"}},
+		{"size zero", []string{"-size", "0"}},
+		{"size negative", []string{"-size", "-5"}},
+		{"size not a number", []string{"-size", "abc"}},
+		{"size above the maximum", []string{"-size", "3000000000"}},
+		{"workers zero", []string{"-size", "10", "-workers", "0"}},
+		{"workers not a number", []string{"-size", "10", "-workers", "x"}},
 	}
-	for _, args := range cases {
-		code, stdout, stderr := runCapturing(args...)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			code, stdout, stderr := runCapturing(c.args...)
 
-		if code != exitUsage {
-			t.Errorf("run(%q): exit code = %d, want %d", args, code, exitUsage)
-		}
-		if stdout != "" {
-			t.Errorf("run(%q): unexpected stdout %q", args, stdout)
-		}
-		if !strings.Contains(stderr, usage) {
-			t.Errorf("run(%q): stderr does not show the usage: %q", args, stderr)
+			if code != exitUsage {
+				t.Errorf("exit code = %d, want %d", code, exitUsage)
+			}
+			if stdout != "" {
+				t.Errorf("unexpected stdout %q", stdout)
+			}
+			if !strings.Contains(stderr, "-workers") {
+				t.Errorf("stderr does not show the usage: %q", stderr)
+			}
+		})
+	}
+}
+
+func TestRunHelpShowsUsageAndSucceeds(t *testing.T) {
+	code, _, stderr := runCapturing("-h")
+
+	if code != exitOK {
+		t.Errorf("exit code = %d, want %d", code, exitOK)
+	}
+	for _, want := range []string{"-size", "-workers"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("usage is missing %q: %q", want, stderr)
 		}
 	}
 }
 
-func TestParseArgsUsesDefaults(t *testing.T) {
-	size, workers, err := parseArgs(nil)
-	if err != nil {
-		t.Fatal(err)
+func TestParseFlags(t *testing.T) {
+	cases := []struct {
+		name        string
+		args        []string
+		wantSize    int
+		wantWorkers int
+	}{
+		{"defaults", nil, defaultSize, defaultWorkers},
+		{"size only", []string{"-size", "50"}, 50, defaultWorkers},
+		{"workers only", []string{"-workers", "8"}, defaultSize, 8},
+		{"both", []string{"-size", "50", "-workers", "8"}, 50, 8},
 	}
-	if size != defaultSize || workers != defaultWorkers {
-		t.Errorf("parseArgs(nil) = (%d, %d), want (%d, %d)", size, workers, defaultSize, defaultWorkers)
-	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			size, workers, err := parseFlags(c.args, io.Discard)
 
-	size, workers, err = parseArgs([]string{"50"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if size != 50 || workers != defaultWorkers {
-		t.Errorf("parseArgs([50]) = (%d, %d), want (50, %d)", size, workers, defaultWorkers)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if size != c.wantSize || workers != c.wantWorkers {
+				t.Errorf("got (%d, %d), want (%d, %d)", size, workers, c.wantSize, c.wantWorkers)
+			}
+		})
 	}
 }

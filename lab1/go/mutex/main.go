@@ -4,10 +4,11 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/astowneer/multithreading-/lab1/go/mutex/internal/arraysum"
@@ -17,11 +18,12 @@ const (
 	defaultSize    = 1_000_000_000
 	defaultWorkers = 4
 
+	// maxSize is the largest array accepted, the same limit as a Java array.
+	maxSize = math.MaxInt32
+
 	exitOK      = 0
 	exitFailure = 1
 	exitUsage   = 2
-
-	usage = "Usage: go run . [size] [workers]"
 )
 
 func main() {
@@ -29,10 +31,11 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	size, workers, err := parseArgs(args)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		fmt.Fprintln(stderr, usage)
+	size, workers, err := parseFlags(args, stderr)
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		return exitOK
+	case err != nil:
 		return exitUsage
 	}
 
@@ -68,30 +71,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-func parseArgs(args []string) (size, workers int, err error) {
-	if len(args) > 2 {
-		return 0, 0, errors.New("Too many arguments")
+// parseFlags reads the -size and -workers flags. On invalid input it prints the problem and the
+// usage to output and returns an error; -h prints the usage and returns flag.ErrHelp.
+func parseFlags(args []string, output io.Writer) (size, workers int, err error) {
+	fs := flag.NewFlagSet("lab1-array-sum", flag.ContinueOnError)
+	fs.SetOutput(output)
+	fs.IntVar(&size, "size", defaultSize, "number of array elements")
+	fs.IntVar(&workers, "workers", defaultWorkers, "number of worker goroutines")
+
+	if err := fs.Parse(args); err != nil {
+		return 0, 0, err // Parse has already printed the problem and the usage
 	}
 
-	size, workers = defaultSize, defaultWorkers
-	if len(args) > 0 {
-		if size, err = parsePositive(args[0], "size"); err != nil {
-			return 0, 0, err
-		}
+	switch {
+	case fs.NArg() > 0:
+		err = fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	case size < 1 || size > maxSize:
+		err = fmt.Errorf("size must be between 1 and %d, was %d", maxSize, size)
+	case workers < 1:
+		err = fmt.Errorf("workers must be at least 1, was %d", workers)
 	}
-	if len(args) > 1 {
-		if workers, err = parsePositive(args[1], "workers"); err != nil {
-			return 0, 0, err
-		}
+	if err != nil {
+		fmt.Fprintln(output, err)
+		fs.Usage()
+		return 0, 0, err
 	}
 	return size, workers, nil
-}
-
-// parsePositive parses a positive 32-bit integer, the same range as a Java int.
-func parsePositive(text, name string) (int, error) {
-	value, err := strconv.ParseInt(text, 10, 32)
-	if err != nil || value < 1 {
-		return 0, fmt.Errorf("%s must be a positive integer, was '%s'", name, text)
-	}
-	return int(value), nil
 }
