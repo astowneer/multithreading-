@@ -16,13 +16,10 @@ public class SumThread extends Thread {
   @Override
   public void run() {
     long localSum = 0;
-    System.out.println("=".repeat(100));
 
     for (int i = startIndex; i < endIndex; i++) {
       localSum += this.arr[i];
     }
-
-    System.out.println("SUM Threads " + localSum);
 
     this.sharedSum.add(localSum);
   }
