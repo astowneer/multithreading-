@@ -1,4 +1,4 @@
-package lab1.java;
+package com.astowner.multithreading.lab1;
 
 public class SharedSum {
   private long sum = 0;

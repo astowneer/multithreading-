@@ -1,4 +1,4 @@
-package lab1.java;
+package com.astowner.multithreading.lab1;
 
 public class SumThread extends Thread {
   private final int startIndex;
