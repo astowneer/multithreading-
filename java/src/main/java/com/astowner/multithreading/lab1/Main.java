@@ -1,12 +1,13 @@
 package com.astowner.multithreading.lab1;
 
-/** Fills an array, sums it with threads and without, and prints how long each took. */
+/** Fills an array, sums it with threads and without, and compares the results. */
 public final class Main {
 
   private static final int DEFAULT_SIZE = 1_000_000_000;
   private static final int DEFAULT_THREADS = 4;
 
   private static final int EXIT_OK = 0;
+  private static final int EXIT_FAILURE = 1;
   private static final int EXIT_USAGE = 2;
 
   private static final String USAGE = "Usage: java -jar lab1-array-sum.jar [size] [threads]";
@@ -47,7 +48,10 @@ public final class Main {
     long sequentialSum = ArraySum.sequential(arr);
     System.out.println("No threads time (seconds): " + secondsSince(start));
     System.out.println("SUM no threads: " + sequentialSum);
-    return EXIT_OK;
+
+    boolean match = parallelSum == sequentialSum;
+    System.out.println("Results match: " + match);
+    return match ? EXIT_OK : EXIT_FAILURE;
   }
 
   private static int parsePositive(String text, String name) {
