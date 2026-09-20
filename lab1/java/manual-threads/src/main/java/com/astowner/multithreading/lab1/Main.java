@@ -1,5 +1,7 @@
 package com.astowner.multithreading.lab1;
 
+import java.util.Locale;
+
 /** Fills an array, sums it with threads and without, and compares the results. */
 public final class Main {
 
@@ -48,13 +50,17 @@ public final class Main {
 
     long start = System.nanoTime();
     long parallelSum = ArraySum.parallel(arr, threads);
-    System.out.println("Multithreaded time (seconds): " + secondsSince(start));
+    double parallelSeconds = secondsSince(start);
+    System.out.println("Multithreaded time (seconds): " + parallelSeconds);
     System.out.println("SUM multithreaded: " + parallelSum);
 
     start = System.nanoTime();
     long sequentialSum = ArraySum.sequential(arr);
-    System.out.println("No threads time (seconds): " + secondsSince(start));
+    double sequentialSeconds = secondsSince(start);
+    System.out.println("No threads time (seconds): " + sequentialSeconds);
     System.out.println("SUM no threads: " + sequentialSum);
+
+    System.out.printf(Locale.ROOT, "Speedup: %.2fx%n", sequentialSeconds / parallelSeconds);
 
     boolean match = parallelSum == sequentialSum;
     System.out.println("Results match: " + match);
