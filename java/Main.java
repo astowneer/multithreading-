@@ -47,8 +47,8 @@ public class Main {
 
     for (int i = 0; i < numberOfThreads; i++) {
       int startIndex = i * chunkSize;
-      int endIndex = startIndex + chunkSize;
-      fillThreads[i] = new FillThread(startIndex, endIndex, arr);
+      int endIndex = (i == numberOfThreads - 1) ? arr.length : startIndex + chunkSize;
+      fillThreads[i] =new FillThread(startIndex, endIndex, arr);
     }
 
     for (FillThread t : fillThreads) {
