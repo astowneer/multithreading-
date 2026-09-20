@@ -1,8 +1,11 @@
-# Lab 1 - Parallel array sum (Java)
+# Lab 1 - Java - manual threads
 
-Parallelization of the array element sum: the array is split into contiguous parts, each part is
-summed by its own thread, and the partial sums are added into a shared total. The result is
-compared with a sequential sum and the timings of both are printed.
+Implementation of [Lab 1](../../README.md) in Java.
+
+**Approach:** explicit `Thread` objects, one per part of the array. No thread pool, fork/join or
+parallel streams. The array is split into contiguous parts, each part is summed by its own thread,
+and the partial sums are added into a shared, synchronized total. The result is compared with a
+sequential sum and the timings of both are printed.
 
 ## Requirements
 
