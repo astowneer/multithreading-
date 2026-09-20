@@ -5,7 +5,7 @@ public final class Main {
 
   private Main() {}
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws InterruptedException {
     int dimension = 1_000_000_000;
     int numberOfThreads = 4;
 

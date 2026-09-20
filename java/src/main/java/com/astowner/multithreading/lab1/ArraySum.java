@@ -20,7 +20,7 @@ public final class ArraySum {
   }
 
   /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
-  public static long parallel(int[] arr, int threads) {
+  public static long parallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
     SharedSum total = new SharedSum();
     List<SumTask> tasks = ChunkRange.split(arr.length, threads).stream()
@@ -32,7 +32,7 @@ public final class ArraySum {
   }
 
   /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
-  public static void fillRandomParallel(int[] arr, int threads) {
+  public static void fillRandomParallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
     List<FillTask> tasks = ChunkRange.split(arr.length, threads).stream()
         .map(range -> new FillTask(arr, range))
@@ -42,7 +42,8 @@ public final class ArraySum {
   }
 
   /** Starts one thread per task, then waits for all of them to finish. */
-  private static void runAll(String name, List<? extends Runnable> tasks) {
+  private static void runAll(String name, List<? extends Runnable> tasks)
+      throws InterruptedException {
     List<Thread> workers = new ArrayList<>(tasks.size());
     for (int i = 0; i < tasks.size(); i++) {
       workers.add(new Thread(tasks.get(i), name + "-" + i));
@@ -50,11 +51,7 @@ public final class ArraySum {
 
     workers.forEach(Thread::start);
     for (Thread worker : workers) {
-      try {
-        worker.join();
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
+      worker.join();
     }
   }
 }
