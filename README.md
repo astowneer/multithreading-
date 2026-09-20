@@ -43,8 +43,9 @@ files of its language change.
 | Workflow | Runs on changes to | What it does |
 |----------|--------------------|--------------|
 | `java.yml` | `**/java/**` | Finds every folder containing a `pom.xml`, then builds and tests each one with `./mvnw verify` on JDK 21 and uploads the jar as a run artifact. |
+| `go.yml` | `**/go/**` | Finds every folder containing a `go.mod`, then, for each one, checks `gofmt`, runs `go vet`, builds, runs `go test -race` and uploads the binary as a run artifact. The Go version is read from `go.mod`. |
 
-Projects are discovered automatically, so a new Java approach needs no workflow changes.
+Projects are discovered automatically, so a new Java or Go approach needs no workflow changes.
 
 ## Adding an implementation
 
