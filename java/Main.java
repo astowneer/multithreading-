@@ -35,7 +35,7 @@ public class Main {
     long endTime = System.nanoTime();
     double elapsedSeconds = (endTime - startTime) / 1_000_000_000.0;
     System.out.println("Multithreaded time (seconds): " + elapsedSeconds);
-    System.out.println("SUM no threads: " + sharedSum.getSum());
+    System.out.println("SUM multithreaded: " + sharedSum.getSum());
   }
 
   private static void populateArr(int numberOfThreads, int chunkSize, int[] arr) {
