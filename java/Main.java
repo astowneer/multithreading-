@@ -1,9 +1,5 @@
 package lab1.java;
 
-import java.util.Random;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.IntStream;
-
 public class Main {
 
   private static void findSumNoThreads(int[] arr) {
