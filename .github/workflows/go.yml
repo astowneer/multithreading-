@@ -65,6 +65,11 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # The version is pinned so that new checks cannot break the build unannounced. Staticcheck
+      # needs a newer Go than go.mod asks for; the go command downloads that toolchain itself.
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
+
       - name: Build
         run: go build -o bin/ ./...
 
