@@ -1,13 +1,14 @@
 package com.astowner.multithreading.lab1;
 
-public class SharedSum {
-  private long sum = 0;
+/** Thread-safe accumulator that worker threads add their partial sums to. */
+final class SharedSum {
+  private long sum;
 
-  public synchronized void add(long value) {
-    this.sum += value;
+  synchronized void add(long value) {
+    sum += value;
   }
 
-  public synchronized long getSum() {
-    return this.sum;
+  synchronized long getSum() {
+    return sum;
   }
 }
