@@ -1,0 +1,79 @@
+name: Go
+
+on:
+  push:
+    paths:
+      - "**/go/**"
+      - ".github/workflows/go.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Every folder that contains a go.mod is a Go project (<lab>/go/<approach>),
+  # so new labs and approaches are built without editing this workflow.
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.find.outputs.projects }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: find
+        run: |
+          projects=$(find . -name go.mod -exec dirname {} \; \
+            | sed 's|^\./||' | sort \
+            | jq -R -s -c 'split("\n") | map(select(length > 0)) | map({path: ., name: gsub("/"; "-")})')
+          echo "projects=$projects" >> "$GITHUB_OUTPUT"
+          echo "Go projects: $projects"
+
+  build:
+    needs: discover
+    if: needs.discover.outputs.projects != '[]'
+    name: build (${{ matrix.project.path }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJson(needs.discover.outputs.projects) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.project.path }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Go version comes from the project's go.mod. The projects have no
+      # dependencies (and so no go.sum), which leaves nothing to cache.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.project.path }}/go.mod
+          cache: false
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -o bin/ ./...
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Publish binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.project.name }}-bin
+          path: ${{ matrix.project.path }}/bin/
+          retention-days: 14
