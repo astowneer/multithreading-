@@ -1,6 +1,7 @@
 package arraysum
 
 import (
+	"fmt"
 	"math"
 	"testing"
 )
@@ -49,9 +50,11 @@ func TestParallelSumMatchesClosedFormForUnevenSize(t *testing.T) {
 	}
 
 	for _, workers := range workerCounts {
-		if got := mustParallel(t, arr, workers); got != want {
-			t.Errorf("Parallel with %d goroutines = %d, want %d", workers, got, want)
-		}
+		t.Run(fmt.Sprintf("workers=%d", workers), func(t *testing.T) {
+			if got := mustParallel(t, arr, workers); got != want {
+				t.Errorf("Parallel = %d, want %d", got, want)
+			}
+		})
 	}
 	if got := Sequential(arr); got != want {
 		t.Errorf("Sequential = %d, want %d", got, want)
@@ -75,19 +78,21 @@ func TestParallelSumRejectsInvalidGoroutineCount(t *testing.T) {
 
 func TestFillTouchesEveryElementIncludingRemainder(t *testing.T) {
 	for _, workers := range []int{1, 3, 4, 7} {
-		arr := make([]int32, unevenSize)
-		for i := range arr {
-			arr[i] = -1
-		}
-
-		if err := FillRandomParallel(arr, workers); err != nil {
-			t.Fatalf("FillRandomParallel(_, %d): %v", workers, err)
-		}
-
-		for i, value := range arr {
-			if value < 0 || value >= RandomBound {
-				t.Fatalf("%d goroutines: element %d is %d, left unfilled or out of range", workers, i, value)
+		t.Run(fmt.Sprintf("workers=%d", workers), func(t *testing.T) {
+			arr := make([]int32, unevenSize)
+			for i := range arr {
+				arr[i] = -1
 			}
-		}
+
+			if err := FillRandomParallel(arr, workers); err != nil {
+				t.Fatal(err)
+			}
+
+			for i, value := range arr {
+				if value < 0 || value >= RandomBound {
+					t.Fatalf("element %d is %d, left unfilled or out of range", i, value)
+				}
+			}
+		})
 	}
 }
