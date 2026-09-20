@@ -20,7 +20,7 @@ public class Main {
     System.out.println("SUM no threads: " + sum);
   }
 
-  private static void findSumMultithreading(int numberOfThreads, SumThread[] threads, SharedSum sharedSum, int[] arr) {
+  private static void findSumMultithreading(int numberOfThreads, Thread[] threads, SharedSum sharedSum, int[] arr) {
     long startTime = System.nanoTime();
     for (int i = 0; i < numberOfThreads; i++) {
       threads[i].start();
@@ -42,18 +42,17 @@ public class Main {
 
   private static void populateArr(int numberOfThreads, int[] arr) {
     List<ChunkRange> ranges = ChunkRange.split(arr.length, numberOfThreads);
-    FillThread[] fillThreads = new FillThread[numberOfThreads];
+    Thread[] fillThreads = new Thread[numberOfThreads];
 
     for (int i = 0; i < numberOfThreads; i++) {
-      ChunkRange range = ranges.get(i);
-      fillThreads[i] = new FillThread(range.start(), range.end(), arr);
+      fillThreads[i] = new Thread(new FillTask(arr, ranges.get(i)));
     }
 
-    for (FillThread t : fillThreads) {
+    for (Thread t : fillThreads) {
       t.start();
     }
 
-    for (FillThread t : fillThreads) {
+    for (Thread t : fillThreads) {
       try {
         t.join();
       } catch (InterruptedException e) {
@@ -62,13 +61,12 @@ public class Main {
     }
   }
 
-  private static SumThread[] createSumThreads(int numberOfThreads, int[] arr, SharedSum sharedSum) {
+  private static Thread[] createSumThreads(int numberOfThreads, int[] arr, SharedSum sharedSum) {
     List<ChunkRange> ranges = ChunkRange.split(arr.length, numberOfThreads);
-    SumThread[] threads = new SumThread[numberOfThreads];
+    Thread[] threads = new Thread[numberOfThreads];
 
     for (int i = 0; i < numberOfThreads; i++) {
-      ChunkRange range = ranges.get(i);
-      threads[i] = new SumThread(range.start(), range.end(), arr, sharedSum);
+      threads[i] = new Thread(new SumTask(arr, ranges.get(i), sharedSum));
     }
 
     return threads;
@@ -84,7 +82,7 @@ public class Main {
 
     populateArr(numberOfThreads, arr);
 
-    SumThread[] threads = createSumThreads(numberOfThreads, arr, sharedSum);
+    Thread[] threads = createSumThreads(numberOfThreads, arr, sharedSum);
     findSumMultithreading(numberOfThreads, threads, sharedSum, arr);
 
     findSumNoThreads(arr);
