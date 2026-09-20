@@ -1,4 +1,4 @@
-# Lab 1 - Go - goroutines
+# Lab 1 - Go - mutex
 
 Ibrew install go of [Lab 1](../../README.md) in Go.
 
