@@ -12,6 +12,14 @@ the partial sums combined into a total.
 
 - Go 1.21 or newer (`brew install go` on macOS).
 
+## Build, vet and test
+
+```sh
+go build ./...
+go vet ./...
+go test ./...
+```
+
 ## Run
 
 ```sh
@@ -23,3 +31,13 @@ Expected output:
 ```
 Hello, World!
 ```
+
+## Layout
+
+```
+go.mod    module definition (module lab1-array-sum, no external dependencies)
+main.go   command-line entry point
+```
+
+The array sum code will be added as further `.go` files in this folder (package `main`), with
+`_test.go` files next to the code they test.
