@@ -5,7 +5,8 @@ Implementation of [Lab 1](../../README.md) in Java.
 **Approach:** explicit `Thread` objects, one per part of the array. No thread pool, fork/join or
 parallel streams. The array is split into contiguous parts, each part is summed by its own thread,
 and the partial sums are added into a shared, synchronized total. The result is compared with a
-sequential sum and the timings of both are printed.
+sequential sum, and the timings of both and the speedup (sequential time divided by multithreaded
+time) are printed.
 
 ## Requirements
 
