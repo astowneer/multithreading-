@@ -3,6 +3,7 @@ package com.astowner.multithreading.lab1;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Phaser;
 
 /** Sequential and multithreaded operations on {@code int[]} arrays. */
 public final class ArraySum {
@@ -19,16 +20,31 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
+  /**
+   * Sums the array using {@code threads} worker threads, each handling one contiguous part. The
+   * main thread and the workers are parties of one {@link Phaser}; main waits for phase 0 to end,
+   * which happens once every worker has arrived.
+   */
   public static long parallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
-    SharedSum total = new SharedSum();
-    List<SumTask> tasks = ChunkRange.split(arr.length, threads).stream()
-        .map(range -> new SumTask(arr, range, total))
-        .toList();
+    List<ChunkRange> ranges = ChunkRange.split(arr.length, threads);
+    long[] partials = new long[ranges.size()];
 
-    runAll("sum", tasks);
-    return total.getSum();
+    // Party 1 is main itself. Each worker is registered *before* it starts, so the phase cannot
+    // end early because a worker has not registered yet.
+    Phaser phaser = new Phaser(1);
+    for (int i = 0; i < ranges.size(); i++) {
+      phaser.register();
+      new Thread(new SumTask(arr, ranges.get(i), partials, i, phaser), "sum-" + i).start();
+    }
+
+    phaser.arriveAndAwaitAdvance(); // main arrives and waits for all workers
+
+    long total = 0;
+    for (long partial : partials) {
+      total += partial;
+    }
+    return total;
   }
 
   /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
