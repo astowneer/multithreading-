@@ -1,0 +1,9 @@
+# Build output
+/lab1-array-sum
+/errgroup
+/bin/
+
+# Test and profiling output
+*.test
+*.out
+*.prof
