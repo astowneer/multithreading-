@@ -1,9 +1,10 @@
 // Package arraysum sums an array of integers, sequentially or with goroutines. The goroutines are
 // managed by an errgroup.Group, which waits for them, limits how many run at once and returns the
-// first error any of them reports.
+// first error any of them reports, cancelling the rest.
 package arraysum
 
 import (
+	"context"
 	"math/rand/v2"
 	"sync"
 
@@ -22,25 +23,41 @@ func Sequential(arr []int32) int64 {
 	return sum
 }
 
-// Parallel sums the slice using workers goroutines, each handling one contiguous part.
+// cancelCheckBlock is how many elements a goroutine sums between two checks of its context.
+// Checking per element would slow the loop down; per block, cancellation still takes effect
+// within microseconds.
+const cancelCheckBlock = 1 << 16
+
+// Parallel sums the slice using workers goroutines, each handling one contiguous part. It is
+// ParallelContext with a context that is never cancelled.
+func Parallel(arr []int32, workers int) (int64, error) {
+	return ParallelContext(context.Background(), arr, workers)
+}
+
+// ParallelContext sums the slice using workers goroutines, each handling one contiguous part, and
+// stops early when ctx is cancelled.
+//
+// errgroup.WithContext derives a context that is cancelled as soon as any goroutine returns an
+// error (or the parent ctx is cancelled). Every goroutine checks that context between blocks, so
+// one failure or one Ctrl+C stops all of them, and g.Wait returns the first error.
 //
 // g.Go starts a goroutine and g.Wait waits for all of them, like a WaitGroup with Add and Done
-// done for you. SetLimit caps how many run at once, so g.Go blocks while workers goroutines are
-// running; with exactly workers parts it never blocks here, but it keeps the limit honest if the
-// split changes. Goroutine i writes only partials[i], so the partial sums need no lock.
-func Parallel(arr []int32, workers int) (int64, error) {
+// done for you. SetLimit caps how many run at once. Goroutine i writes only partials[i], so the
+// partial sums need no lock.
+func ParallelContext(ctx context.Context, arr []int32, workers int) (int64, error) {
 	ranges, err := splitRange(len(arr), workers)
 	if err != nil {
 		return 0, err
 	}
 
-	var g errgroup.Group
+	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(workers)
 	partials := make([]int64, len(ranges))
 	for i, r := range ranges {
 		g.Go(func() error {
-			partials[i] = Sequential(arr[r.start:r.end])
-			return nil
+			sum, err := sumContext(ctx, arr[r.start:r.end])
+			partials[i] = sum
+			return err
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -52,6 +69,19 @@ func Parallel(arr []int32, workers int) (int64, error) {
 		total += partial
 	}
 	return total, nil
+}
+
+// sumContext sums part in blocks of cancelCheckBlock elements and returns ctx.Err() as soon as
+// the context is cancelled.
+func sumContext(ctx context.Context, part []int32) (int64, error) {
+	var sum int64
+	for start := 0; start < len(part); start += cancelCheckBlock {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		sum += Sequential(part[start:min(start+cancelCheckBlock, len(part))])
+	}
+	return sum, nil
 }
 
 // FillRandomParallel fills the slice with random values in [0, RandomBound) using workers
