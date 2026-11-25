@@ -1,5 +1,6 @@
 // Package arraysum sums an array of integers, sequentially or with goroutines. Each goroutine sums
-// one contiguous part of the array and adds its partial sum to a mutex-protected total.
+// one contiguous part of the array and adds its partial sum to a shared total with a
+// compare-and-swap loop, so no lock is needed.
 package arraysum
 
 import (
@@ -20,15 +21,14 @@ func Sequential(arr []int32) int64 {
 }
 
 // Parallel sums the slice using workers goroutines, each handling one contiguous part. Each
-// goroutine sums its part into a local variable and adds it to the shared total once, so the
-// mutex is taken workers times rather than once per element.
+// goroutine sums its part into a local variable and adds it to the shared casSum once.
 func Parallel(arr []int32, workers int) (int64, error) {
 	ranges, err := splitRange(len(arr), workers)
 	if err != nil {
 		return 0, err
 	}
 
-	var total sharedSum
+	var total casSum
 	runAll(ranges, func(r chunkRange) {
 		total.add(Sequential(arr[r.start:r.end]))
 	})
