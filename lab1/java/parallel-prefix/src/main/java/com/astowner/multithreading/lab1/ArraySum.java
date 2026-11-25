@@ -1,8 +1,11 @@
 package com.astowner.multithreading.lab1;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
 
 /** Sequential and multithreaded operations on {@code int[]} arrays. */
 public final class ArraySum {
@@ -19,16 +22,34 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
-  public static long parallel(int[] arr, int threads) throws InterruptedException {
+  /**
+   * Computes all prefix sums of the array in parallel with {@link Arrays#parallelPrefix} and
+   * returns the last one, which is the total. {@code prefix[i]} is
+   * {@code arr[0] + ... + arr[i]}.
+   *
+   * <p>The prefixes are {@code long}s, so this allocates a {@code long[]} twice the size of the
+   * input. It is a demonstration of a parallel <em>scan</em>, not the fastest way to get one sum.
+   */
+  public static long[] prefixSums(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
-    SharedSum total = new SharedSum();
-    List<SumTask> tasks = ChunkRange.split(arr.length, threads).stream()
-        .map(range -> new SumTask(arr, range, total))
-        .toList();
+    // Both Arrays.parallelSetAll and Arrays.parallelPrefix fork their work into the pool of the
+    // calling worker thread, so running them inside our own pool makes `threads` take effect.
+    try (ForkJoinPool pool = new ForkJoinPool(threads)) {
+      return pool.submit(() -> {
+        long[] prefix = new long[arr.length];
+        Arrays.parallelSetAll(prefix, i -> arr[i]);   // widen int -> long, in parallel
+        Arrays.parallelPrefix(prefix, Long::sum);      // in-place inclusive scan
+        return prefix;
+      }).get();
+    } catch (ExecutionException e) {
+      throw new IllegalStateException("the parallel prefix failed", e.getCause());
+    }
+  }
 
-    runAll("sum", tasks);
-    return total.getSum();
+  /** Sums the array as the last element of its parallel prefix sums. */
+  public static long parallel(int[] arr, int threads) throws InterruptedException {
+    long[] prefix = prefixSums(arr, threads);
+    return prefix.length == 0 ? 0 : prefix[prefix.length - 1];
   }
 
   /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
