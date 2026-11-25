@@ -19,7 +19,7 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
+  /** Sums the array using {@code threads} virtual threads, each handling one contiguous part. */
   public static long parallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
     SharedSum total = new SharedSum();
@@ -31,7 +31,7 @@ public final class ArraySum {
     return total.getSum();
   }
 
-  /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
+  /** Fills the array with random values in {@code [0, 100)} using {@code threads} virtual threads. */
   public static void fillRandomParallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
     List<FillTask> tasks = ChunkRange.split(arr.length, threads).stream()
@@ -41,12 +41,15 @@ public final class ArraySum {
     runAll("fill", tasks);
   }
 
-  /** Starts one thread per task, then waits for all of them to finish. */
+  /** Starts one virtual thread per task, then waits for all of them to finish. */
   private static void runAll(String name, List<? extends Runnable> tasks)
       throws InterruptedException {
+    // Thread.ofVirtual() (Java 21) builds virtual threads; Thread.ofPlatform() builds the classic
+    // OS-backed ones that `new Thread(...)` creates. name(prefix, 0) numbers them sum-0, sum-1, ...
+    Thread.Builder builder = Thread.ofVirtual().name(name + "-", 0);
     List<Thread> workers = new ArrayList<>(tasks.size());
-    for (int i = 0; i < tasks.size(); i++) {
-      workers.add(new Thread(tasks.get(i), name + "-" + i));
+    for (Runnable task : tasks) {
+      workers.add(builder.unstarted(task));
     }
 
     workers.forEach(Thread::start);
