@@ -1,15 +1,37 @@
-# Lab 1 - Go - mutex
+# Lab 1 - Go - atomic-cas
 
 Implementation of [Lab 1](../../README.md) in Go.
 
-**Approach:** one goroutine per part of the array, synchronized with `sync.WaitGroup` and
-`sync.Mutex`. The array is split into contiguous parts, each part is summed by its own goroutine,
-and the partial sums are added into a shared total protected by a mutex. The result is compared
-with a sequential sum, and the timings of both and the speedup (sequential time divided by
-multithreaded time) are printed.
+**Approach:** one goroutine per part of the array, synchronized with `sync.WaitGroup` and a
+hand-written lock-free accumulator. The array is split into contiguous parts, each part is summed by
+its own goroutine, and each partial sum is added to a shared `atomic.Int64` with a
+`CompareAndSwap` retry loop. The result is compared with a sequential sum, and the timings of both
+and the speedup (sequential time divided by multithreaded time) are printed.
 
-Go has other synchronisation tools (channels, `sync/atomic`), which are meant to be separate
-approaches next to this one.
+## How the CAS loop works
+
+```go
+for {
+	old := s.sum.Load()                         // 1. read the current total
+	if s.sum.CompareAndSwap(old, old+delta) {   // 2. write old+delta only if the total is still old
+		return
+	}
+	// 3. another goroutine changed the total between 1 and 2: nothing was written, try again
+}
+```
+
+`CompareAndSwap` is one indivisible CPU instruction (`LOCK CMPXCHG` on amd64, `CAS` on arm64). It
+never blocks. A goroutine that loses the race simply repeats the loop, and one of the competing
+goroutines always succeeds, so the whole program keeps making progress. That property is what
+"lock-free" means.
+
+The [atomic](../atomic) approach does the same with `atomic.Int64.Add`, which the hardware does in
+one step without retries. Write the CAS loop yourself when the new value is not a plain sum, for
+example "keep the maximum" or "add, but never above a limit". `Add` cannot express those.
+
+`go test -v -run CasSum ./internal/arraysum` prints how often the loop had to retry when 32
+goroutines add at once (hundreds of thousands of retries for 320 000 adds on an 8-core machine).
+That is the cost of contention.
 
 ## Requirements
 
@@ -64,7 +86,8 @@ go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 go test -race ./...
 ```
 
-`-race` turns on Go's data race detector. The tests fail under it if the mutex is removed.
+`-race` turns on Go's data race detector. Replacing the CAS loop with a plain read and write
+of an `int64` makes the tests fail under it.
 `staticcheck` is a linter, the same one CI runs.
 
 ## Benchmarks
@@ -84,7 +107,7 @@ main.go                      command-line entry point and timing
 main_test.go                 tests for the command line
 internal/arraysum/
   arraysum.go                Sequential, Parallel and FillRandomParallel, and the goroutine runner
+  cas.go                     casSum: lock-free accumulator built on a CompareAndSwap retry loop
   chunk.go                   splits [0, size) into balanced parts (lengths differ by at most 1)
-  sharedsum.go               mutex-protected accumulator for the partial sums
   *_test.go                  tests and benchmarks, next to the code they cover
 ```
