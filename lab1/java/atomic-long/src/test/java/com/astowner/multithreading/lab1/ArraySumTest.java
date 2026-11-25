@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -61,6 +62,16 @@ class ArraySumTest {
     assertTrue(
         Arrays.stream(arr).allMatch(v -> v >= 0 && v < FillTask.MAX_EXCLUSIVE),
         "an element was left unfilled or out of range");
+  }
+
+  @RepeatedTest(50)
+  void parallelSumIsExactUnderHeavyContention() throws InterruptedException {
+    // 64 threads on 6_400 elements: each thread does almost no work, so they all hit the shared
+    // total at nearly the same moment. A lost update would show up as a wrong sum.
+    int[] arr = new int[6_400];
+    Arrays.fill(arr, 1);
+
+    assertEquals(arr.length, ArraySum.parallel(arr, 64));
   }
 
   private static long sumParallel(int[] arr, int threads) {
