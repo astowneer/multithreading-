@@ -1,15 +1,29 @@
-# Lab 1 - Go - mutex
+# Lab 1 - Go - atomic
 
 Implementation of [Lab 1](../../README.md) in Go.
 
 **Approach:** one goroutine per part of the array, synchronized with `sync.WaitGroup` and
-`sync.Mutex`. The array is split into contiguous parts, each part is summed by its own goroutine,
-and the partial sums are added into a shared total protected by a mutex. The result is compared
-with a sequential sum, and the timings of both and the speedup (sequential time divided by
-multithreaded time) are printed.
+`sync/atomic`. The array is split into contiguous parts, each part is summed by its own goroutine,
+and each partial sum is added to a shared `atomic.Int64` with `Add`. The result is compared with a
+sequential sum, and the timings of both and the speedup (sequential time divided by multithreaded
+time) are printed.
 
-Go has other synchronisation tools (channels, `sync/atomic`), which are meant to be separate
-approaches next to this one.
+## How it differs from the mutex approach
+
+| | [mutex](../mutex) | atomic |
+|---|---|---|
+| Shared total | `int64` guarded by `sync.Mutex` | `atomic.Int64` |
+| Adding a partial sum | `Lock`, `sum += v`, `Unlock` | `total.Add(v)` |
+| What the CPU does | may park the goroutine while another one holds the lock | one indivisible instruction (`LOCK XADD` on amd64, `LDADD` on arm64) |
+| Blocking | yes, goroutines can wait for the lock | no, this is lock-free |
+| Works for | any critical section, however long | a single number: add, load, store, swap, compare-and-swap |
+
+Atomics are the cheapest way to share one counter. They don't scale to anything bigger: two
+values that must change together still need a mutex.
+
+Here each goroutine touches the shared total only once, after summing its part locally, so the
+speed is about the same as the mutex version. The difference would show if goroutines added every
+element to the shared total. The Java counterpart is `AtomicLong` (`lab1/java/atomic-long`).
 
 ## Requirements
 
@@ -64,7 +78,8 @@ go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 go test -race ./...
 ```
 
-`-race` turns on Go's data race detector. The tests fail under it if the mutex is removed.
+`-race` turns on Go's data race detector. Replacing `total.Add` with a plain `+=` on an `int64`
+makes the tests fail under it.
 `staticcheck` is a linter, the same one CI runs.
 
 ## Benchmarks
@@ -85,6 +100,5 @@ main_test.go                 tests for the command line
 internal/arraysum/
   arraysum.go                Sequential, Parallel and FillRandomParallel, and the goroutine runner
   chunk.go                   splits [0, size) into balanced parts (lengths differ by at most 1)
-  sharedsum.go               mutex-protected accumulator for the partial sums
   *_test.go                  tests and benchmarks, next to the code they cover
 ```
