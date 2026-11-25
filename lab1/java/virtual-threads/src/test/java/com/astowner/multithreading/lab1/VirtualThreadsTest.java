@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,14 +26,20 @@ class VirtualThreadsTest {
   }
 
   @Test
-  void tasksReallyRunOnVirtualThreads() throws InterruptedException {
-    int[] arr = new int[1_000];
-    // The fill runs on the same runAll as the sum, so a fill that worked proves runAll ran.
-    ArraySum.fillRandomParallel(arr, 4);
+  void runAllStartsEveryTaskOnANamedVirtualThread() throws InterruptedException {
+    Set<String> names = ConcurrentHashMap.newKeySet();
+    AtomicInteger platformThreads = new AtomicInteger();
+    Runnable record = () -> {
+      names.add(Thread.currentThread().getName());
+      if (!Thread.currentThread().isVirtual()) {
+        platformThreads.incrementAndGet();
+      }
+    };
 
-    Thread probe = Thread.ofVirtual().start(() -> { });
-    probe.join();
-    assertTrue(probe.isVirtual());
+    ArraySum.runAll("probe", List.of(record, record, record));
+
+    assertEquals(0, platformThreads.get(), "a task ran on a platform thread");
+    assertEquals(Set.of("probe-0", "probe-1", "probe-2"), names);
   }
 
   /**

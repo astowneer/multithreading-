@@ -67,7 +67,9 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Fills the array with random values in {@code [0, 100)} using {@code threads} virtual threads. */
+  /**
+   * Fills the array with random values in {@code [0, 100)} using {@code threads} virtual threads.
+   */
   public static void fillRandomParallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
     List<FillTask> tasks = ChunkRange.split(arr.length, threads).stream()
@@ -78,7 +80,7 @@ public final class ArraySum {
   }
 
   /** Starts one virtual thread per task, then waits for all of them to finish. */
-  private static void runAll(String name, List<? extends Runnable> tasks)
+  static void runAll(String name, List<? extends Runnable> tasks)
       throws InterruptedException {
     // Thread.ofVirtual() (Java 21) builds virtual threads; Thread.ofPlatform() builds the classic
     // OS-backed ones that `new Thread(...)` creates. name(prefix, 0) numbers them sum-0, sum-1, ...
