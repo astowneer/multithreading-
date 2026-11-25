@@ -3,6 +3,7 @@ package com.astowner.multithreading.lab1;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CyclicBarrier;
 
 /** Sequential and multithreaded operations on {@code int[]} arrays. */
 public final class ArraySum {
@@ -19,16 +20,25 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
+  /**
+   * Sums the array using {@code threads} worker threads, each handling one contiguous part. The
+   * workers meet at a {@link CyclicBarrier}; its barrier action, run once by the last thread to
+   * arrive, adds the partial sums together.
+   */
   public static long parallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
-    SharedSum total = new SharedSum();
-    List<SumTask> tasks = ChunkRange.split(arr.length, threads).stream()
-        .map(range -> new SumTask(arr, range, total))
-        .toList();
+    List<ChunkRange> ranges = ChunkRange.split(arr.length, threads);
+    PartialSums sums = new PartialSums(ranges.size());
+    CyclicBarrier barrier = new CyclicBarrier(ranges.size(), sums::combine);
+
+    List<SumTask> tasks = new ArrayList<>(ranges.size());
+    for (int i = 0; i < ranges.size(); i++) {
+      tasks.add(new SumTask(arr, ranges.get(i), sums, i, barrier));
+    }
 
     runAll("sum", tasks);
-    return total.getSum();
+    // join() inside runAll makes the total written by the barrier action visible here.
+    return sums.total();
   }
 
   /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
