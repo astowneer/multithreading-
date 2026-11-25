@@ -19,16 +19,23 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
+  /**
+   * Sums the array using {@code threads} worker threads, each handling one contiguous part. Every
+   * worker keeps its own partial sum; the main thread adds them up after joining the workers.
+   */
   public static long parallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
-    SharedSum total = new SharedSum();
     List<SumTask> tasks = ChunkRange.split(arr.length, threads).stream()
-        .map(range -> new SumTask(arr, range, total))
+        .map(range -> new SumTask(arr, range))
         .toList();
 
     runAll("sum", tasks);
-    return total.getSum();
+
+    long total = 0;
+    for (SumTask task : tasks) {
+      total += task.result();
+    }
+    return total;
   }
 
   /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
