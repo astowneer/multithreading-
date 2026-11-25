@@ -3,6 +3,10 @@ package com.astowner.multithreading.lab1;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /** Sequential and multithreaded operations on {@code int[]} arrays. */
 public final class ArraySum {
@@ -19,16 +23,41 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
+  /**
+   * Sums the array on a fixed pool of {@code threads} threads. The array is split into
+   * {@code threads} parts, each part is submitted as a {@link SumTask}, and the partial results
+   * are collected from their {@link Future}s.
+   */
   public static long parallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
-    SharedSum total = new SharedSum();
     List<SumTask> tasks = ChunkRange.split(arr.length, threads).stream()
-        .map(range -> new SumTask(arr, range, total))
+        .map(range -> new SumTask(arr, range))
         .toList();
 
-    runAll("sum", tasks);
-    return total.getSum();
+    // ExecutorService is AutoCloseable since Java 19: close() waits for running tasks and then
+    // shuts the pool down. Before that you had to call shutdown() and awaitTermination() yourself.
+    try (ExecutorService pool = Executors.newFixedThreadPool(threads)) {
+      // invokeAll submits every task and blocks until all of them are done.
+      List<Future<Long>> partials = pool.invokeAll(tasks);
+
+      long total = 0;
+      for (Future<Long> partial : partials) {
+        total += getUnchecked(partial);
+      }
+      return total;
+    }
+  }
+
+  /**
+   * Returns the result of a completed future. If the task threw, {@code get()} wraps the error in
+   * an {@link ExecutionException}; it is unwrapped and rethrown unchecked here.
+   */
+  private static long getUnchecked(Future<Long> future) throws InterruptedException {
+    try {
+      return future.get();
+    } catch (ExecutionException e) {
+      throw new IllegalStateException("a sum task failed", e.getCause());
+    }
   }
 
   /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
