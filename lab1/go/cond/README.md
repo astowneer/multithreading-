@@ -1,15 +1,46 @@
-# Lab 1 - Go - mutex
+# Lab 1 - Go - cond
 
 Implementation of [Lab 1](../../README.md) in Go.
 
-**Approach:** one goroutine per part of the array, synchronized with `sync.WaitGroup` and
-`sync.Mutex`. The array is split into contiguous parts, each part is summed by its own goroutine,
-and the partial sums are added into a shared total protected by a mutex. The result is compared
-with a sequential sum, and the timings of both and the speedup (sequential time divided by
-multithreaded time) are printed.
+**Approach:** one goroutine per part of the array, synchronized with `sync.Mutex` and
+`sync.Cond`. The array is split into contiguous parts, each part is summed by its own goroutine,
+and each goroutine adds its partial sum to a collector and signals a condition variable. The
+calling goroutine sleeps on the condition until all partial sums have arrived. There is no
+`WaitGroup`. The result is compared with a sequential sum, and the timings of both and the
+speedup (sequential time divided by multithreaded time) are printed.
 
-Go has other synchronisation tools (channels, `sync/atomic`), which are meant to be separate
-approaches next to this one.
+## How a condition variable works
+
+A `sync.Cond` lets a goroutine sleep until some condition on shared data becomes true. It is
+always paired with the mutex that guards that data:
+
+```go
+// worker                         // waiting goroutine
+c.mu.Lock()                       c.mu.Lock()
+c.sum += partial                  for c.arrived < n { // a loop, never a plain if
+c.arrived++                           c.cond.Wait()   // unlock mu, sleep, lock mu again
+c.mu.Unlock()                     }
+c.cond.Broadcast()                total := c.sum
+                                  c.mu.Unlock()
+```
+
+- **`Wait` unlocks the mutex and goes to sleep in one step**, and locks the mutex again before it
+  returns. Without that, a worker could add the last sum and signal in the gap between the check
+  and the sleep, and the waiter would sleep forever (a *lost wake-up*).
+- **The condition is checked in a `for` loop.** Waking up only means "something changed", not "the
+  condition is true". Here every `add` wakes the waiter, but only the last one makes
+  `arrived == n`.
+- **`Broadcast` wakes every waiter, `Signal` wakes one.** There is one waiter here, so either works.
+  `Broadcast` stays correct if more are added.
+
+## Why it is rarely used in Go
+
+`sync.Cond` is how Java's `wait`/`notifyAll` and POSIX `pthread_cond_t` work, and this lab shows
+the primitive that higher-level tools are built from. In Go code it is rare: `sync.WaitGroup`
+covers "wait for N goroutines" (see [mutex](../mutex)), and a channel covers "wait for a value"
+(see [channels](../channels)), both with less room for mistakes. `sync.Cond` is the right tool when
+many goroutines wait for a condition on shared state that changes many times, such as a bounded
+queue waking producers and consumers.
 
 ## Requirements
 
@@ -64,7 +95,8 @@ go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 go test -race ./...
 ```
 
-`-race` turns on Go's data race detector. The tests fail under it if the mutex is removed.
+`-race` turns on Go's data race detector. The collector tests check that `wait` does not
+return before every partial sum has arrived.
 `staticcheck` is a linter, the same one CI runs.
 
 ## Benchmarks
@@ -84,7 +116,7 @@ main.go                      command-line entry point and timing
 main_test.go                 tests for the command line
 internal/arraysum/
   arraysum.go                Sequential, Parallel and FillRandomParallel, and the goroutine runner
+  collector.go               collector: partial sums under a mutex, waited for with sync.Cond
   chunk.go                   splits [0, size) into balanced parts (lengths differ by at most 1)
-  sharedsum.go               mutex-protected accumulator for the partial sums
   *_test.go                  tests and benchmarks, next to the code they cover
 ```
