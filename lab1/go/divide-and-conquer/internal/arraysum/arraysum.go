@@ -1,8 +1,10 @@
-// Package arraysum sums an array of integers, sequentially or with goroutines. Each goroutine sums
-// one contiguous part of the array and adds its partial sum to a mutex-protected total.
+// Package arraysum sums an array of integers, sequentially or with goroutines. The parallel sum is
+// divide and conquer in fork-join style: the array is halved recursively, each split forks a
+// goroutine for one half, and the halves' sums are joined on the way back up.
 package arraysum
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"sync"
 )
@@ -19,20 +21,13 @@ func Sequential(arr []int32) int64 {
 	return sum
 }
 
-// Parallel sums the slice using workers goroutines, each handling one contiguous part. Each
-// goroutine sums its part into a local variable and adds it to the shared total once, so the
-// mutex is taken workers times rather than once per element.
+// Parallel sums the slice using workers goroutines in total: sumRecursive splits it into workers
+// balanced parts by halving, and every split but the first runs on a goroutine forked for it.
 func Parallel(arr []int32, workers int) (int64, error) {
-	ranges, err := splitRange(len(arr), workers)
-	if err != nil {
-		return 0, err
+	if workers < 1 {
+		return 0, fmt.Errorf("workers must be >= 1, was %d", workers)
 	}
-
-	var total sharedSum
-	runAll(ranges, func(r chunkRange) {
-		total.add(Sequential(arr[r.start:r.end]))
-	})
-	return total.get(), nil
+	return sumRecursive(arr, workers), nil
 }
 
 // FillRandomParallel fills the slice with random values in [0, RandomBound) using workers
