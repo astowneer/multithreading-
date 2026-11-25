@@ -1,10 +1,13 @@
-// Package arraysum sums an array of integers, sequentially or with goroutines. Each goroutine sums
-// one contiguous part of the array and adds its partial sum to a mutex-protected total.
+// Package arraysum sums an array of integers, sequentially or with goroutines. The goroutines are
+// managed by an errgroup.Group, which waits for them, limits how many run at once and returns the
+// first error any of them reports.
 package arraysum
 
 import (
 	"math/rand/v2"
 	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // RandomBound is the exclusive upper bound of the values written by FillRandomParallel.
@@ -19,20 +22,36 @@ func Sequential(arr []int32) int64 {
 	return sum
 }
 
-// Parallel sums the slice using workers goroutines, each handling one contiguous part. Each
-// goroutine sums its part into a local variable and adds it to the shared total once, so the
-// mutex is taken workers times rather than once per element.
+// Parallel sums the slice using workers goroutines, each handling one contiguous part.
+//
+// g.Go starts a goroutine and g.Wait waits for all of them, like a WaitGroup with Add and Done
+// done for you. SetLimit caps how many run at once, so g.Go blocks while workers goroutines are
+// running; with exactly workers parts it never blocks here, but it keeps the limit honest if the
+// split changes. Goroutine i writes only partials[i], so the partial sums need no lock.
 func Parallel(arr []int32, workers int) (int64, error) {
 	ranges, err := splitRange(len(arr), workers)
 	if err != nil {
 		return 0, err
 	}
 
-	var total sharedSum
-	runAll(ranges, func(r chunkRange) {
-		total.add(Sequential(arr[r.start:r.end]))
-	})
-	return total.get(), nil
+	var g errgroup.Group
+	g.SetLimit(workers)
+	partials := make([]int64, len(ranges))
+	for i, r := range ranges {
+		g.Go(func() error {
+			partials[i] = Sequential(arr[r.start:r.end])
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return 0, err
+	}
+
+	var total int64
+	for _, partial := range partials {
+		total += partial
+	}
+	return total, nil
 }
 
 // FillRandomParallel fills the slice with random values in [0, RandomBound) using workers
