@@ -1,11 +1,17 @@
-// Package arraysum sums an array of integers, sequentially or with goroutines. Each goroutine sums
-// one contiguous part of the array and adds its partial sum to a mutex-protected total.
+// Package arraysum sums an array of integers, sequentially or with goroutines. The array is split
+// into more parts than there are workers, and a fixed pool of worker goroutines takes the parts
+// from a channel one at a time, so a worker that finishes early takes more parts.
 package arraysum
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"sync"
 )
+
+// ChunksPerWorker is how many parts the array is split into per worker. More parts balance the
+// load better, because a fast worker takes more of them; fewer parts mean less channel traffic.
+const ChunksPerWorker = 4
 
 // RandomBound is the exclusive upper bound of the values written by FillRandomParallel.
 const RandomBound = 100
@@ -19,20 +25,21 @@ func Sequential(arr []int32) int64 {
 	return sum
 }
 
-// Parallel sums the slice using workers goroutines, each handling one contiguous part. Each
-// goroutine sums its part into a local variable and adds it to the shared total once, so the
-// mutex is taken workers times rather than once per element.
+// Parallel sums the slice using a pool of workers goroutines. The slice is split into
+// workers*ChunksPerWorker contiguous parts, which the workers take from a channel; each worker
+// sends the sum of each part it takes back on another channel.
 func Parallel(arr []int32, workers int) (int64, error) {
-	ranges, err := splitRange(len(arr), workers)
+	if workers < 1 {
+		return 0, fmt.Errorf("workers must be >= 1, was %d", workers)
+	}
+	chunks, err := splitRange(len(arr), workers*ChunksPerWorker)
 	if err != nil {
 		return 0, err
 	}
 
-	var total sharedSum
-	runAll(ranges, func(r chunkRange) {
-		total.add(Sequential(arr[r.start:r.end]))
-	})
-	return total.get(), nil
+	return runPool(workers, chunks, func(r chunkRange) int64 {
+		return Sequential(arr[r.start:r.end])
+	}), nil
 }
 
 // FillRandomParallel fills the slice with random values in [0, RandomBound) using workers
