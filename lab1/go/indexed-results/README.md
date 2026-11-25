@@ -1,15 +1,35 @@
-# Lab 1 - Go - mutex
+# Lab 1 - Go - indexed-results
 
 Implementation of [Lab 1](../../README.md) in Go.
 
-**Approach:** one goroutine per part of the array, synchronized with `sync.WaitGroup` and
-`sync.Mutex`. The array is split into contiguous parts, each part is summed by its own goroutine,
-and the partial sums are added into a shared total protected by a mutex. The result is compared
-with a sequential sum, and the timings of both and the speedup (sequential time divided by
-multithreaded time) are printed.
+**Approach:** one goroutine per part of the array, synchronized only with `sync.WaitGroup`. The
+array is split into contiguous parts, each part is summed by its own goroutine, and goroutine `i`
+writes its partial sum into `partials[i]`. After `wg.Wait()` the calling goroutine adds the slots
+up. The result is compared with a sequential sum, and the timings of both and the speedup
+(sequential time divided by multithreaded time) are printed.
 
-Go has other synchronisation tools (channels, `sync/atomic`), which are meant to be separate
-approaches next to this one.
+## Why no lock is needed
+
+A data race needs two goroutines accessing the *same* memory location, at least one of them
+writing. Here no location is shared while the goroutines run:
+
+- each goroutine reads only its own part of `arr`;
+- each goroutine writes only its own `partials[i]`, and different slice elements are different
+  memory locations;
+- the calling goroutine reads `partials` only after `wg.Wait()`. Each `wg.Done()` *happens before*
+  the `Wait` it releases returns, so every write is visible by then.
+
+This is the cheapest correct approach: no lock, no atomic instruction and no channel, just one wait
+at the end. It is also what the [mutex](../mutex), [atomic](../atomic) and [channels](../channels)
+approaches do internally in their local `Sequential` calls. They only differ in how the partial
+sums are combined.
+
+**False sharing.** The slots sit next to each other in memory, so several of them share one CPU
+cache line (64 bytes on most x86, 128 on Apple silicon). Writes from different cores to the same
+cache line make the cores pass the line back and forth. Here every goroutine writes its slot
+once, so this costs nothing measurable. Had they written `partials[i] += value` for every element,
+it would slow the program down badly, and the fix would be to sum into a local variable, as this
+code does, or to pad each slot to a full cache line.
 
 ## Requirements
 
@@ -64,7 +84,8 @@ go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 go test -race ./...
 ```
 
-`-race` turns on Go's data race detector. The tests fail under it if the mutex is removed.
+`-race` turns on Go's data race detector. Making two goroutines write the same slot (for
+example `partials[0]`) makes the tests fail under it.
 `staticcheck` is a linter, the same one CI runs.
 
 ## Benchmarks
@@ -85,6 +106,5 @@ main_test.go                 tests for the command line
 internal/arraysum/
   arraysum.go                Sequential, Parallel and FillRandomParallel, and the goroutine runner
   chunk.go                   splits [0, size) into balanced parts (lengths differ by at most 1)
-  sharedsum.go               mutex-protected accumulator for the partial sums
   *_test.go                  tests and benchmarks, next to the code they cover
 ```
