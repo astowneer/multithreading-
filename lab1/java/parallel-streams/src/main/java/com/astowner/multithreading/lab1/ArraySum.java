@@ -1,8 +1,11 @@
 package com.astowner.multithreading.lab1;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
 
 /** Sequential and multithreaded operations on {@code int[]} arrays. */
 public final class ArraySum {
@@ -19,16 +22,32 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
+  /**
+   * Sums the array with a parallel stream on the JVM-wide {@link ForkJoinPool#commonPool()}. This
+   * is the one-liner you would normally write; its parallelism is chosen by the JVM.
+   */
+  public static long parallelOnCommonPool(int[] arr) {
+    Objects.requireNonNull(arr, "arr");
+    // asLongStream() widens every int to long, so the sum cannot overflow int.
+    return Arrays.stream(arr).parallel().asLongStream().sum();
+  }
+
+  /**
+   * Sums the array with a parallel stream that runs on a dedicated pool of {@code threads}
+   * workers, so the parallelism can be chosen.
+   *
+   * <p>A parallel stream splits its work into fork/join tasks. When the terminal operation starts
+   * inside a {@link ForkJoinPool} worker, those tasks are forked into that worker's pool instead
+   * of the common pool. This is how the JDK is implemented, but not part of the
+   * {@code Stream} specification.
+   */
   public static long parallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
-    SharedSum total = new SharedSum();
-    List<SumTask> tasks = ChunkRange.split(arr.length, threads).stream()
-        .map(range -> new SumTask(arr, range, total))
-        .toList();
-
-    runAll("sum", tasks);
-    return total.getSum();
+    try (ForkJoinPool pool = new ForkJoinPool(threads)) {
+      return pool.submit(() -> Arrays.stream(arr).parallel().asLongStream().sum()).get();
+    } catch (ExecutionException e) {
+      throw new IllegalStateException("the parallel stream failed", e.getCause());
+    }
   }
 
   /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
