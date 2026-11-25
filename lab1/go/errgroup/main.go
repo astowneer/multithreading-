@@ -3,12 +3,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/astowneer/multithreading-/lab1/go/errgroup/internal/arraysum"
@@ -24,13 +26,21 @@ const (
 	exitOK      = 0
 	exitFailure = 1
 	exitUsage   = 2
+
+	// exitInterrupted is the shell convention for a program stopped by Ctrl+C (128 + SIGINT).
+	exitInterrupted = 130
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	// ctx is cancelled on Ctrl+C, which stops the parallel sum early instead of killing the
+	// program mid-way.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	size, workers, err := parseFlags(args, stderr)
 	switch {
 	case errors.Is(err, flag.ErrHelp):
@@ -46,8 +56,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	start := time.Now()
-	parallel, err := arraysum.Parallel(arr, workers)
-	if err != nil {
+	parallel, err := arraysum.ParallelContext(ctx, arr, workers)
+	switch {
+	case errors.Is(err, context.Canceled):
+		fmt.Fprintln(stderr, "interrupted")
+		return exitInterrupted
+	case err != nil:
 		fmt.Fprintln(stderr, err)
 		return exitFailure
 	}

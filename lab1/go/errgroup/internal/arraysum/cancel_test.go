@@ -21,7 +21,7 @@ func TestParallelContextStopsWhenCancelledBeforeStart(t *testing.T) {
 func TestParallelContextStopsWhenDeadlinePasses(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
-	arr := make([]int32, 200_000_000) // takes far longer than 1 ms to sum
+	arr := make([]int32, 50_000_000) // takes far longer than 1 ms to sum
 
 	start := time.Now()
 	_, err := ParallelContext(ctx, arr, 4)

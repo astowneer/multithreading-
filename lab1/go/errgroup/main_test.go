@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -9,7 +10,7 @@ import (
 
 func runCapturing(args ...string) (code int, stdout, stderr string) {
 	var out, errOut bytes.Buffer
-	code = run(args, &out, &errOut)
+	code = run(context.Background(), args, &out, &errOut)
 	return code, out.String(), errOut.String()
 }
 
@@ -100,5 +101,20 @@ func TestParseFlags(t *testing.T) {
 				t.Errorf("got (%d, %d), want (%d, %d)", size, workers, c.wantSize, c.wantWorkers)
 			}
 		})
+	}
+}
+
+func TestRunReportsInterruptWhenContextIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out, errOut bytes.Buffer
+
+	code := run(ctx, []string{"-size", "1000000", "-workers", "4"}, &out, &errOut)
+
+	if code != exitInterrupted {
+		t.Errorf("exit code = %d, want %d", code, exitInterrupted)
+	}
+	if !strings.Contains(errOut.String(), "interrupted") {
+		t.Errorf("stderr = %q, want it to say interrupted", errOut.String())
 	}
 }
