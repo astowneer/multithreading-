@@ -1,15 +1,43 @@
-# Lab 1 - Go - mutex
+# Lab 1 - Go - worker-pool
 
 Implementation of [Lab 1](../../README.md) in Go.
 
-**Approach:** one goroutine per part of the array, synchronized with `sync.WaitGroup` and
-`sync.Mutex`. The array is split into contiguous parts, each part is summed by its own goroutine,
-and the partial sums are added into a shared total protected by a mutex. The result is compared
-with a sequential sum, and the timings of both and the speedup (sequential time divided by
-multithreaded time) are printed.
+**Approach:** a fixed pool of worker goroutines fed by channels. The array is split into
+`workers × ChunksPerWorker` (4) contiguous parts. A producer goroutine sends the parts into a
+`jobs` channel, `workers` goroutines take parts from it one at a time and send each part's sum into
+a `results` channel, and the calling goroutine adds up everything it receives. The result is
+compared with a sequential sum, and the timings of both and the speedup (sequential time divided
+by multithreaded time) are printed.
 
-Go has other synchronisation tools (channels, `sync/atomic`), which are meant to be separate
-approaches next to this one.
+## How the pool is wired
+
+```
+               jobs (chan chunkRange)            results (chan int64)
+producer ──▶ ┌──────────────────────┐ ──▶ worker 1 ──▶ ┌────────────────┐
+  sends      │ part part part part …│ ──▶ worker 2 ──▶ │ sum sum sum …  │ ──▶ caller adds up
+  all parts, └──────────────────────┘ ──▶ worker N ──▶ └────────────────┘
+  closes jobs                                          closer: wg.Wait(), close(results)
+```
+
+- **`for job := range jobs`** in each worker ends when `jobs` is closed and empty. Closing a channel
+  is how the producer says "no more work".
+- **The closer goroutine** waits for every worker (`sync.WaitGroup`) and then closes `results`, so
+  the caller's `for result := range results` ends after the last sum.
+- **Each channel is closed by its only sender, after its last send.** Close it earlier, or from a
+  receiver, and some goroutine panics with "send on closed channel".
+
+## Why more parts than workers
+
+In the other approaches every goroutine gets exactly one part. If one core is slower (busy with
+another program, or an efficiency core on Apple silicon) the whole sum waits for it. Here a worker
+that finishes early takes the next part from the channel, so the work spreads itself across the
+fast cores. This is load balancing, and it matters most when parts take unequal time. For an
+array sum the parts are equal, so the gain is small and the extra channel operations cost a
+little.
+
+The pool also caps the number of goroutines at `workers` however many parts there are. That is
+the reason to use a pool when the jobs are many: thousands of files or requests, not 4 array
+parts.
 
 ## Requirements
 
@@ -64,7 +92,8 @@ go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 go test -race ./...
 ```
 
-`-race` turns on Go's data race detector. The tests fail under it if the mutex is removed.
+`-race` turns on Go's data race detector. `TestRunPoolNeverRunsMoreTasksThanWorkers` also
+checks that at most `workers` tasks ever run at the same moment.
 `staticcheck` is a linter, the same one CI runs.
 
 ## Benchmarks
@@ -84,7 +113,7 @@ main.go                      command-line entry point and timing
 main_test.go                 tests for the command line
 internal/arraysum/
   arraysum.go                Sequential, Parallel and FillRandomParallel, and the goroutine runner
+  pool.go                    runPool: fixed pool of workers with jobs and results channels
   chunk.go                   splits [0, size) into balanced parts (lengths differ by at most 1)
-  sharedsum.go               mutex-protected accumulator for the partial sums
   *_test.go                  tests and benchmarks, next to the code they cover
 ```
