@@ -1,10 +1,12 @@
 // Package arraysum sums an array of integers, sequentially or with goroutines. Each goroutine sums
-// one contiguous part of the array and adds its partial sum to a mutex-protected total.
+// one contiguous part of the array and adds its partial sum to a shared total with an atomic
+// add, so no lock is needed.
 package arraysum
 
 import (
 	"math/rand/v2"
 	"sync"
+	"sync/atomic"
 )
 
 // RandomBound is the exclusive upper bound of the values written by FillRandomParallel.
@@ -20,19 +22,22 @@ func Sequential(arr []int32) int64 {
 }
 
 // Parallel sums the slice using workers goroutines, each handling one contiguous part. Each
-// goroutine sums its part into a local variable and adds it to the shared total once, so the
-// mutex is taken workers times rather than once per element.
+// goroutine sums its part into a local variable and adds it to the shared total once, with
+// atomic.Int64.Add. The add is a single indivisible CPU instruction (LOCK XADD on amd64, LDADD on
+// arm64), so two goroutines adding at the same moment cannot lose an update and no goroutine ever
+// waits for a lock.
 func Parallel(arr []int32, workers int) (int64, error) {
 	ranges, err := splitRange(len(arr), workers)
 	if err != nil {
 		return 0, err
 	}
 
-	var total sharedSum
+	var total atomic.Int64
 	runAll(ranges, func(r chunkRange) {
-		total.add(Sequential(arr[r.start:r.end]))
+		total.Add(Sequential(arr[r.start:r.end]))
 	})
-	return total.get(), nil
+	// wg.Wait inside runAll happens after every Add, so a plain Load sees the final total.
+	return total.Load(), nil
 }
 
 // FillRandomParallel fills the slice with random values in [0, RandomBound) using workers
