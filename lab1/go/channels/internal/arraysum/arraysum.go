@@ -1,5 +1,6 @@
 // Package arraysum sums an array of integers, sequentially or with goroutines. Each goroutine sums
-// one contiguous part of the array and adds its partial sum to a mutex-protected total.
+// one contiguous part of the array and sends its partial sum over a channel; the calling goroutine
+// receives the partial sums and adds them up. No memory is shared, so no lock is needed.
 package arraysum
 
 import (
@@ -19,20 +20,33 @@ func Sequential(arr []int32) int64 {
 	return sum
 }
 
-// Parallel sums the slice using workers goroutines, each handling one contiguous part. Each
-// goroutine sums its part into a local variable and adds it to the shared total once, so the
-// mutex is taken workers times rather than once per element.
+// Parallel sums the slice using workers goroutines, each handling one contiguous part.
+//
+// Each goroutine sends its partial sum into the results channel. The calling goroutine receives
+// exactly one value per goroutine, so the receive loop also replaces the WaitGroup: when it ends,
+// every goroutine has delivered its sum. Only the receiving goroutine touches total, so total
+// needs no synchronisation; the channel hands each value over safely.
+//
+// The channel is buffered with room for every partial sum, so a goroutine never waits for the
+// receiver: it sends and exits.
 func Parallel(arr []int32, workers int) (int64, error) {
 	ranges, err := splitRange(len(arr), workers)
 	if err != nil {
 		return 0, err
 	}
 
-	var total sharedSum
-	runAll(ranges, func(r chunkRange) {
-		total.add(Sequential(arr[r.start:r.end]))
-	})
-	return total.get(), nil
+	results := make(chan int64, len(ranges))
+	for _, r := range ranges {
+		go func(part []int32) {
+			results <- Sequential(part)
+		}(arr[r.start:r.end])
+	}
+
+	var total int64
+	for range ranges {
+		total += <-results
+	}
+	return total, nil
 }
 
 // FillRandomParallel fills the slice with random values in [0, RandomBound) using workers
