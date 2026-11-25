@@ -11,5 +11,6 @@ parts).
 |----------|----------|-------------|
 | Java | [manual-threads](java/manual-threads) | One explicit `Thread` per part of the array; partial sums are added into a synchronized shared total. |
 | Go | [mutex](go/mutex) | One goroutine per part of the array; partial sums are added into a shared total protected by a `sync.Mutex`, and a `sync.WaitGroup` waits for the goroutines. |
+| Go | [atomic](go/atomic) | One goroutine per part of the array; partial sums are added into a shared `atomic.Int64` with a lock-free `Add`. |
 
 Each approach is a self-contained project with its own build files and README.
