@@ -52,11 +52,16 @@ public final class Main {
     System.out.println("SUM multithreaded: " + parallelSum);
 
     start = System.nanoTime();
+    long executorSum = ArraySum.parallelWithExecutor(arr, threads);
+    System.out.println("Virtual-thread executor time (seconds): " + secondsSince(start));
+    System.out.println("SUM virtual-thread executor: " + executorSum);
+
+    start = System.nanoTime();
     long sequentialSum = ArraySum.sequential(arr);
     System.out.println("No threads time (seconds): " + secondsSince(start));
     System.out.println("SUM no threads: " + sequentialSum);
 
-    boolean match = parallelSum == sequentialSum;
+    boolean match = parallelSum == sequentialSum && executorSum == sequentialSum;
     System.out.println("Results match: " + match);
     return match ? EXIT_OK : EXIT_FAILURE;
   }
