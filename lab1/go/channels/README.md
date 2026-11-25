@@ -1,15 +1,39 @@
-# Lab 1 - Go - mutex
+# Lab 1 - Go - channels
 
 Implementation of [Lab 1](../../README.md) in Go.
 
-**Approach:** one goroutine per part of the array, synchronized with `sync.WaitGroup` and
-`sync.Mutex`. The array is split into contiguous parts, each part is summed by its own goroutine,
-and the partial sums are added into a shared total protected by a mutex. The result is compared
-with a sequential sum, and the timings of both and the speedup (sequential time divided by
-multithreaded time) are printed.
+**Approach:** one goroutine per part of the array, synchronized only with a channel. The array is
+split into contiguous parts, each part is summed by its own goroutine, and each goroutine sends its
+partial sum into a buffered channel. The calling goroutine receives one value per part and adds
+them up. The result is compared with a sequential sum, and the timings of both and the speedup
+(sequential time divided by multithreaded time) are printed.
 
-Go has other synchronisation tools (channels, `sync/atomic`), which are meant to be separate
-approaches next to this one.
+## Why there is no mutex and no WaitGroup
+
+The Go proverb is: *don't communicate by sharing memory; share memory by communicating.*
+
+```go
+results := make(chan int64, len(ranges)) // room for every partial sum
+for _, r := range ranges {
+	go func(part []int32) { results <- Sequential(part) }(arr[r.start:r.end])
+}
+var total int64
+for range ranges { // exactly one receive per goroutine
+	total += <-results
+}
+```
+
+- **No shared total.** Only the receiving goroutine writes `total`. The workers own their partial
+  sums until they send them. A send on a channel *happens before* the matching receive completes,
+  so the receiver always sees the full value.
+- **No WaitGroup.** The loop receives exactly as many values as there are goroutines, so when it
+  ends, all of them have finished their work. The receive is both the transfer of the data and
+  the wait.
+- **Buffered channel.** With capacity `len(ranges)` a send never blocks, so a goroutine sends and
+  exits even if the receiver is busy. With an unbuffered channel the program would still be
+  correct, but each worker would wait for its receive.
+
+Filling the array still uses `sync.WaitGroup`, because the fill produces no values to send back.
 
 ## Requirements
 
@@ -64,7 +88,8 @@ go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 go test -race ./...
 ```
 
-`-race` turns on Go's data race detector. The tests fail under it if the mutex is removed.
+`-race` turns on Go's data race detector. Having the goroutines write into a shared `total`
+instead of sending makes the tests fail under it.
 `staticcheck` is a linter, the same one CI runs.
 
 ## Benchmarks
@@ -85,6 +110,5 @@ main_test.go                 tests for the command line
 internal/arraysum/
   arraysum.go                Sequential, Parallel and FillRandomParallel, and the goroutine runner
   chunk.go                   splits [0, size) into balanced parts (lengths differ by at most 1)
-  sharedsum.go               mutex-protected accumulator for the partial sums
   *_test.go                  tests and benchmarks, next to the code they cover
 ```
