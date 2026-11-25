@@ -1,23 +1,26 @@
 package com.astowner.multithreading.lab1;
 
-/** Sums one part of an array and adds the partial result to a shared total. */
-final class SumTask implements Runnable {
+import java.util.function.Supplier;
+
+/**
+ * Sums one part of an array and returns the result. It is a {@link Supplier} because
+ * {@link java.util.concurrent.CompletableFuture#supplyAsync} takes one.
+ */
+final class SumTask implements Supplier<Long> {
   private final int[] arr;
   private final ChunkRange range;
-  private final SharedSum total;
 
-  SumTask(int[] arr, ChunkRange range, SharedSum total) {
+  SumTask(int[] arr, ChunkRange range) {
     this.arr = arr;
     this.range = range;
-    this.total = total;
   }
 
   @Override
-  public void run() {
+  public Long get() {
     long localSum = 0;
     for (int i = range.start(); i < range.end(); i++) {
       localSum += arr[i];
     }
-    total.add(localSum);
+    return localSum;
   }
 }
