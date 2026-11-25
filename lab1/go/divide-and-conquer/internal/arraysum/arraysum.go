@@ -22,7 +22,8 @@ func Sequential(arr []int32) int64 {
 }
 
 // Parallel sums the slice using workers goroutines in total: sumRecursive splits it into workers
-// balanced parts by halving, and every split but the first runs on a goroutine forked for it.
+// balanced parts by halving, and each split forks one goroutine, so workers-1 goroutines are
+// started and the calling goroutine sums the last part itself.
 func Parallel(arr []int32, workers int) (int64, error) {
 	if workers < 1 {
 		return 0, fmt.Errorf("workers must be >= 1, was %d", workers)

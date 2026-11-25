@@ -1,15 +1,53 @@
-# Lab 1 - Go - mutex
+# Lab 1 - Go - divide-and-conquer
 
 Implementation of [Lab 1](../../README.md) in Go.
 
-**Approach:** one goroutine per part of the array, synchronized with `sync.WaitGroup` and
-`sync.Mutex`. The array is split into contiguous parts, each part is summed by its own goroutine,
-and the partial sums are added into a shared total protected by a mutex. The result is compared
-with a sequential sum, and the timings of both and the speedup (sequential time divided by
-multithreaded time) are printed.
+**Approach:** recursive divide and conquer in fork-join style. The array is split in two, a new
+goroutine sums the left half (*fork*), the current goroutine sums the right half, and then it waits
+for the left sum and adds the two (*join*). Each half is split the same way until every part has
+one worker or is smaller than 4096 elements. The result is compared with a sequential sum, and the
+timings of both and the speedup (sequential time divided by multithreaded time) are printed.
 
-Go has other synchronisation tools (channels, `sync/atomic`), which are meant to be separate
-approaches next to this one.
+## The recursion
+
+```go
+func sumRecursive(arr []int32, workers int) int64 {
+	if workers <= 1 || len(arr) < minForkSize {
+		return Sequential(arr) // leaf: small enough, sum it here
+	}
+	mid, leftWorkers := splitWorkers(len(arr), workers)
+	leftSum := make(chan int64, 1)
+	go func() { leftSum <- sumRecursive(arr[:mid], leftWorkers) }() // fork
+	right := sumRecursive(arr[mid:], workers-leftWorkers)           // keep working
+	return <-leftSum + right                                         // join
+}
+```
+
+With `-workers 4` the tree is:
+
+```
+                 [0 ............ n)  4 workers
+                /                  \
+      [0 .. n/2) 2 workers     [n/2 .. n) 2 workers
+       /        \                /         \
+  [0..n/4)  [n/4..n/2)     [n/2..3n/4)  [3n/4..n)     <- 4 leaves, each summed sequentially
+```
+
+- **Elements are split in proportion to workers.** With 3 workers the left third goes to 1 worker
+  and the right two thirds to 2, so every leaf gets about `n / workers` elements (the tests check
+  that leaves differ by at most one element).
+- **The current goroutine does half the work** instead of starting two goroutines and waiting, so
+  `workers` leaves need only `workers - 1` new goroutines.
+- **The join is a channel receive.** The channel has room for one value, so the forked goroutine
+  never waits for the receiver.
+- **The threshold** (`minForkSize`) stops splitting parts so small that starting a goroutine costs
+  more than summing them.
+
+No memory is shared between goroutines: each half is a separate subslice and each sum comes back
+over its own channel.
+
+This is the shape of Java's `ForkJoinPool` with a `RecursiveTask`, and of parallel merge sort and
+quicksort. Go needs no special pool for it, because goroutines are cheap enough to fork directly.
 
 ## Requirements
 
@@ -64,7 +102,8 @@ go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...
 go test -race ./...
 ```
 
-`-race` turns on Go's data race detector. The tests fail under it if the mutex is removed.
+`-race` turns on Go's data race detector. The recursion tests replay the splitting and check
+that it makes one leaf per worker and that leaves differ by at most one element.
 `staticcheck` is a linter, the same one CI runs.
 
 ## Benchmarks
@@ -84,7 +123,7 @@ main.go                      command-line entry point and timing
 main_test.go                 tests for the command line
 internal/arraysum/
   arraysum.go                Sequential, Parallel and FillRandomParallel, and the goroutine runner
+  recursive.go               sumRecursive: fork-join recursion, and splitWorkers
   chunk.go                   splits [0, size) into balanced parts (lengths differ by at most 1)
-  sharedsum.go               mutex-protected accumulator for the partial sums
   *_test.go                  tests and benchmarks, next to the code they cover
 ```
