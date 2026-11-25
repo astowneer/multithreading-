@@ -3,6 +3,7 @@ package com.astowner.multithreading.lab1;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Sequential and multithreaded operations on {@code int[]} arrays. */
 public final class ArraySum {
@@ -19,16 +20,19 @@ public final class ArraySum {
     return sum;
   }
 
-  /** Sums the array using {@code threads} worker threads, each handling one contiguous part. */
+  /**
+   * Sums the array using {@code threads} worker threads, each handling one contiguous part. The
+   * partial sums are added into a lock-free {@link AtomicLong}.
+   */
   public static long parallel(int[] arr, int threads) throws InterruptedException {
     Objects.requireNonNull(arr, "arr");
-    SharedSum total = new SharedSum();
+    AtomicLong total = new AtomicLong();
     List<SumTask> tasks = ChunkRange.split(arr.length, threads).stream()
         .map(range -> new SumTask(arr, range, total))
         .toList();
 
     runAll("sum", tasks);
-    return total.getSum();
+    return total.get();
   }
 
   /** Fills the array with random values in {@code [0, 100)} using {@code threads} threads. */
